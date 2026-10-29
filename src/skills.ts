@@ -1,4 +1,4 @@
-import { Skill } from "@opencode/plugin";
+import type { Skill } from "@opencode/plugin";
 import { resolve } from "node:path";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,7 +11,7 @@ export const skills = [
 ] as const;
 
 export function nativeSkills() { return skills.map(skill => ({
-  id: Skill.ID.make(skill.name), name: Skill.Name.make(skill.name), description: skill.description,
+  id: skill.name as Skill.ID, name: skill.name as Skill.Name, description: skill.description,
   autoinvoke: true, path: resolve(dirname(fileURLToPath(import.meta.url)), `../assets/skills/${skill.name}/SKILL.md`) as never,
   content: skill.content,
 })); }

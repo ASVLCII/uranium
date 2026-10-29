@@ -11,7 +11,7 @@ Uranium is an MIT-licensed OpenCode plugin. It adds a durable memory layer using
 Requirements: **OpenCode 2.2.1**, **Node.js 22+** for the setup CLI, and **Python 3.11+** available as `python` on Windows or `python3` elsewhere. OpenCode supplies Bun and the terminal renderer for the plugin itself. Python's standard library is enough; Hermes, pip and an existing OMH installation are unnecessary.
 
 ```sh
-npm install -g github:ASVLCII/uranium#v0.2.0
+npm install -g github:ASVLCII/uranium#v0.3.0
 uranium setup
 uranium doctor
 ```
@@ -59,6 +59,17 @@ The `--koi` option only registers the package/path you provide; it never downloa
 
 ## Memory and data
 
+### Resource use and recovery in 0.3
+
+- The server uses the SDK's public TypeScript contract without bundling a second runtime schema library.
+- Empty memory stores start no Python bridge. When eligible stores exist, project and personal recall share one short-lived bridge per request; no persistent worker, polling loop, embedding service or graph database is started.
+- Personal and project results share the same 3,500-character limit using interleaved per-scope rankings. Recall preserves available origin, approval, revision, freshness and unresolved-status metadata.
+- Continuity storage opens lazily on first use. Tool start/outcome observations are saved automatically, including a bounded list of unfinished parallel calls. New workflow plans create an initial checkpoint if one is missing; explicit checkpoints are preserved.
+- Recovery notes describe observations, not verified completion. An unfinished call might have affected an external system: inspect its outcome before retrying. Large pending lists are summarized in context and remain available through `/uranium-status`.
+- Memory responses are bounded and Python jobs are cancellable with a 60-second limit. Failed automatic continuity storage is reported without preventing ordinary OpenCode work; explicit checkpoint writes still report failure. Diagnose the storage problem and reload before relying on continuity again.
+
+This release adds no automatic model calls. Temporary query text is bounded in memory rather than persisted as conversation history. The receipt feed remains bounded and is not a full durable workflow scheduler.
+
 The included, hash-pinned OMH pure-Python wheel supplies the memory engine. Normal memory operations import directly from the archive; native maintenance commands use a guarded per-user extraction cache. See [engine provenance](engine/README.md) and [license notices](NOTICE.md).
 
 Memory candidates always require operator review. The model-facing `uranium_memory` tool cannot approve them. Only approved, eligible records enter automatic recall, with a final **3,500-character context budget**. Project identity follows canonical repository roots and linked worktrees; separate clones keep separate stores. Outside Git, the canonical directory is the project identity. Personal memory is tied to the local OS user, not remote authentication.
@@ -101,7 +112,7 @@ bun test
 npm run pack:check
 ```
 
-Package checks install the actual tarball into a temporary consumer, run the Node CLI and bundled memory engine, check reviewed recall, preserve JSONC comments/plugins, and verify koi is absent by default and added only by explicit selection. CI runs these checks on Windows and Linux.
+Package checks install the actual tarball into a temporary consumer, run the Node CLI and bundled memory engine, check reviewed recall, preserve JSONC comments/plugins, and verify koi is absent by default and added only by explicit selection. CI targets Windows, Linux and macOS, including a native OpenCode host check.
 
 For the optional native-host check, set `OPENCODE_BIN` to the OpenCode 2.2.1 executable and run `bun scripts/host-smoke.ts` after building. It uses a dummy local model and deliberately stops before inference; it proves real context-hook delivery, not model quality. No automated check calls a paid model.
 

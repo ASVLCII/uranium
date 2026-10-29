@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { mkdtempSync, rmSync, mkdirSync } from "node:fs";
+import { mkdtempSync, rmSync, mkdirSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Memory, projectKey } from "../src/memory.ts";
@@ -25,6 +25,11 @@ test("real OMH capture requires immutable review, survives restart and isolates 
     const userCard = (await a.call("review", { scope: "user" })).cards[0];
     await a.call("approve", { scope: "user", id: userCard.candidate_id, revision: userCard.review_revision });
     expect((await b.recall("seabird diagrams", "other-session")).text).toContain("seabird diagrams");
+    const before = restarted.diagnostics.bridgeLaunches;
+    const combined = await restarted.recall("seabird database diagrams WAL", "test");
+    expect(restarted.diagnostics.bridgeLaunches - before).toBe(1);
+    expect(combined.text).toContain('"kind":"project"');
+    expect(combined.text).toContain('"kind":"user"');
   } finally { rmSync(directory, { recursive: true, force: true }); }
 }, 120000);
 
@@ -56,4 +61,40 @@ test("repository descendants share canonical memory identity", () => {
   const directory = mkdtempSync(join(tmpdir(), "uranium-project-"));
   try { mkdirSync(join(directory, ".git")); mkdirSync(join(directory, "src")); expect(projectKey(directory)).toBe(projectKey(join(directory, "src"))); }
   finally { rmSync(directory, { recursive: true, force: true }); }
+});
+test("empty recall starts no Python and state setup stays lazy", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "uranium-idle-"));
+  try {
+    const state = new State(join(directory, "state"));
+    const memory = new Memory("repo:" + "a".repeat(32), directory, "nonexistent-python-for-empty-test");
+    expect((await memory.recall("anything", "s")).count).toBe(0);
+    expect(memory.diagnostics.bridgeLaunches).toBe(0);
+    state.close();
+    expect(existsSync(join(directory, "state"))).toBe(false);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+test("automatic recovery keeps overlapping unfinished calls across restart", () => {
+  const directory = mkdtempSync(join(tmpdir(), "uranium-recovery-"));
+  try {
+    const state = new State(directory);
+    state.observeTool("s", { callID: "a", name: "shell", status: "started" });
+    state.observeTool("s", { callID: "b", name: "read", status: "started" });
+    state.observeTool("s", { callID: "b", name: "read", status: "completed", exitCode: 0 });
+    state.close();
+    const restarted = new State(directory);
+    expect(restarted.recoveryNote("s").pending).toEqual([{ callID: "a", name: "shell" }]);
+    expect(restarted.recoveryNote("s").meaning).toContain("not proof");
+    restarted.close();
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+test("cancelled and unavailable Python calls fail explicitly without saving data", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "uranium-cancel-"));
+  try {
+    const memory = new Memory("repo:" + "a".repeat(32), directory, "uranium-missing-python-fixture");
+    const controller = new AbortController(); controller.abort();
+    await expect(memory.call("review", {}, controller.signal)).rejects.toThrow("cancelled");
+    expect(memory.diagnostics.bridgeLaunches).toBe(0);
+    await expect(memory.call("review")).rejects.toThrow();
+    expect(existsSync(memory.home())).toBe(false);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
 });

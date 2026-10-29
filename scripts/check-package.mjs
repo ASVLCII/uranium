@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const version = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).version;
 const directory = mkdtempSync(join(tmpdir(), "uranium-pack-"));
 const npm = process.env.npm_execpath;
 if (!npm) throw new Error("Run this check with npm run pack:check");
@@ -26,7 +27,7 @@ try {
   writeFileSync(join(config, "cli.json"), '{"plugins":["existing-tui"],"scroll":{"acceleration":true}}\n');
   const run = args => execFileSync(process.execPath, [cli, ...args], { cwd: consumer, encoding: "utf8", timeout: 120000,
     env: { ...process.env, URANIUM_HOME: join(directory, "data") } });
-  assert(run(["--version"]).includes("0.2.0"));
+  assert(run(["--version"]).includes(version));
   run(["setup", "--config-dir", config]);
   run(["setup", "--config-dir", config]);
   const server = readFileSync(join(config, "opencode.jsonc"), "utf8");

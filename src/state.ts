@@ -8,11 +8,17 @@ export function assertSafe(text: string) {
     throw new Error("Credential-like material cannot be saved as task state");
 }
 export class State {
-  readonly db: Database;
-  constructor(directory: string) {
-    mkdirSync(directory, { recursive: true });
-    this.db = new Database(join(directory, "continuity.sqlite"), { create: true });
-    this.db.exec("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; CREATE TABLE IF NOT EXISTS state (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated TEXT NOT NULL); CREATE TABLE IF NOT EXISTS receipts (id INTEGER PRIMARY KEY, session TEXT, kind TEXT, value TEXT, created TEXT)");
+  private connection?: Database;
+  private closed = false;
+  constructor(readonly directory: string) {}
+  get db() {
+    if (this.closed) throw new Error("Uranium state is closed");
+    if (!this.connection) {
+      mkdirSync(this.directory, { recursive: true });
+      this.connection = new Database(join(this.directory, "continuity.sqlite"), { create: true });
+      this.connection.exec("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; CREATE TABLE IF NOT EXISTS state (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated TEXT NOT NULL); CREATE TABLE IF NOT EXISTS receipts (id INTEGER PRIMARY KEY, session TEXT, kind TEXT, value TEXT, created TEXT)");
+    }
+    return this.connection;
   }
   put(key: string, value: unknown) {
     const json = JSON.stringify(value); assertSafe(json);
@@ -30,5 +36,25 @@ export class State {
     })();
   }
   recent(session: string) { return this.db.query("SELECT kind,value,created FROM receipts WHERE session=? ORDER BY id DESC LIMIT 12").all(session); }
-  close() { this.db.close(true); }
+  observeTool(session: string, observation: Record<string, unknown>) {
+    this.db.transaction(() => {
+      const previous = this.get(`recovery:${session}`);
+      const pending = new Map<string, { callID: string; name: string }>((previous?.pending ?? []).map((entry: any) => [entry.callID, entry]));
+      const callID = String(observation.callID ?? "").slice(0, 96), name = String(observation.name ?? "").slice(0, 80);
+      let overflow = previous?.pendingOverflow === true;
+      if (observation.status === "started") {
+        if (pending.size < 32 || pending.has(callID)) pending.set(callID, { callID, name });
+        else overflow = true;
+      } else pending.delete(callID);
+      this.put(`recovery:${session}`, { ...observation, callID, name, pending: [...pending.values()], pendingOverflow: overflow,
+        observedAt: new Date().toISOString(), meaning: "tool observation, not proof of task completion; reconcile interrupted work before retrying" });
+      this.receipt(session, "tool", observation);
+    })();
+  }
+  recoveryNote(session: string) {
+    const record = this.get(`recovery:${session}`);
+    const pending = Array.isArray(record?.pending) ? record.pending : [];
+    return record ? { ...record, pendingCount: pending.length, pending: pending.slice(0, 4), pendingListTruncated: pending.length > 4 } : undefined;
+  }
+  close() { this.closed = true; this.connection?.close(true); }
 }

@@ -87,8 +87,9 @@ def load_engine(cache: Path, *, unpack: bool = False) -> None:
     sys.path.insert(0, str(target))
 
 
-def main(request: dict) -> dict:
-    load_engine(Path(request.get("engineCache", str(Path(request["home"]) / "engine"))), unpack=request.get("operation") == "native")
+def main(request: dict, *, engine_ready: bool = False) -> dict:
+    if not engine_ready:
+        load_engine(Path(request.get("engineCache", str(Path(request["home"]) / "engine"))), unpack=request.get("operation") == "native")
     from omh.memory import (
         approve_project_memory_candidate, build_project_memory_recall_pack,
         build_project_memory_review, capture_project_memory_candidate, reject_project_memory_candidate,
@@ -99,6 +100,14 @@ def main(request: dict) -> dict:
     home = Path(request["home"])
     paths = OmhPaths(home, home / "unused-hermes")
     operation = request["operation"]
+    if operation == "recall-batch":
+        scopes = request.get("scopes")
+        if not isinstance(scopes, list) or not scopes or len(scopes) > 2 or len(set(scopes)) != len(scopes) or any(s not in ("project", "user") for s in scopes):
+            raise ValueError("invalid recall scopes")
+        if request.get("scope", "project") != "project":
+            raise ValueError("batch recall must use the project home")
+        return {"packs": [main({**request, "operation": "recall", "scope": scope,
+            "home": str(home if scope == "project" else home.parent.parent / "user")}, engine_ready=True) for scope in scopes]}
     session = str(request.get("session", "operator"))
     scope = request.get("scope", "project")
     if scope not in ("project", "user"):

@@ -8,6 +8,6 @@ OpenCode 2.2.1 and its plugin/theme packages are upstream MIT software by their 
 
 Koi is an optional separate integration, such as ASVLCII/opencode-pond. It is not a dependency, is not bundled, and is not installed by Uranium. Existing plugins are preserved during explicit setup; a koi entry is added only if the operator passes --koi.
 
-The server bundle contains portions of the MIT-licensed Effect library. Its notice is retained in assets/LICENSE.effect. The configuration helper contains MIT-licensed jsonc-parser code; its notice is retained in assets/LICENSE.jsonc-parser. The standalone CLI also depends on jsonc-parser, which retains its own package license.
+Earlier Uranium bundles included portions of the MIT-licensed Effect library; its notice remains in assets/LICENSE.effect. The configuration helper contains MIT-licensed jsonc-parser code; its notice is retained in assets/LICENSE.jsonc-parser. The standalone CLI also depends on jsonc-parser, which retains its own package license.
 
 The radiation PNG was derived for the user's Uranium project from their supplied radiation ASCII reference. It is retained here as the existing approved asset.
