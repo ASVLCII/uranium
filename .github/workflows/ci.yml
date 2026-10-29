@@ -25,5 +25,5 @@ jobs:
       - run: bun run build
       - run: bun test
       - run: npm run pack:check
-      - run: bun add --global @opencode/cli@2.2.1
+      - run: npm install --prefix runtime/native-host --no-audit --no-fund @opencode/cli@2.2.1
       - run: bun scripts/host-smoke.ts

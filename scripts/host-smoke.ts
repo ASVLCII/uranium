@@ -2,7 +2,10 @@ import { writeFileSync, existsSync, readFileSync, unlinkSync, mkdirSync } from "
 import { resolve } from "node:path";
 import { Memory, projectKey } from "../src/memory.ts";
 const root = resolve(import.meta.dir, "..");
-const executable = process.env.OPENCODE_BIN || process.env.URANIUM_TEST_EXECUTABLE || Bun.which(process.platform === "win32" ? "opencode.exe" : "opencode");
+const installedPackage = resolve(root, "runtime/native-host/node_modules/@opencode/cli");
+const installedManifest = resolve(installedPackage, "package.json");
+const installedHost = existsSync(installedManifest) ? resolve(installedPackage, JSON.parse(readFileSync(installedManifest, "utf8")).bin.opencode) : "";
+const executable = process.env.OPENCODE_BIN || process.env.URANIUM_TEST_EXECUTABLE || (existsSync(installedHost) ? installedHost : Bun.which(process.platform === "win32" ? "opencode.exe" : "opencode"));
 if (!executable) throw new Error("Set OPENCODE_BIN to the OpenCode 2.2.1 executable for this optional native-host check.");
 const pluginRoot = process.env.URANIUM_TEST_PLUGIN || root;
 const port = 19392;
