@@ -1,0 +1,13 @@
+node_modules/
+runtime/
+artifacts/
+*.log
+__pycache__/
+*.pyc
+*.tgz
+.env
+.env.*
+PLAN.md
+VERIFICATION.md
+scripts/install.ps1
+scripts/terminal-smoke.py

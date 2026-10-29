@@ -1,0 +1,52 @@
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, readdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import assert from "node:assert/strict";
+
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const directory = mkdtempSync(join(tmpdir(), "uranium-pack-"));
+const npm = process.env.npm_execpath;
+if (!npm) throw new Error("Run this check with npm run pack:check");
+const runNpm = args => execFileSync(process.execPath, [npm, ...args], { cwd: root, encoding: "utf8", timeout: 120000 });
+try {
+  const [pack] = JSON.parse(runNpm(["pack", "--json", "--ignore-scripts", "--pack-destination", directory]));
+  const paths = pack.files.map(file => file.path);
+  assert(paths.includes("engine/oh_my_hermes-4.0.3+uranium.3-py3-none-any.whl"));
+  assert(paths.includes("dist/server.js") && paths.includes("dist/tui.js") && paths.includes("bin/uranium.mjs"));
+  assert(!paths.some(path => /(?:^|\/)(?:runtime|artifacts|node_modules|\.env|\.git)(?:\/|$)|pond|koi/i.test(path)), "Private state or koi leaked into the package");
+  const consumer = join(directory, "consumer"); mkdirSync(consumer);
+  writeFileSync(join(consumer, "package.json"), '{"private":true}\n');
+  runNpm(["install", "--ignore-scripts", "--no-audit", "--no-fund", "--prefix", consumer, join(directory, pack.filename)]);
+  const installed = join(consumer, "node_modules/@asvlcii/uranium");
+  const cli = join(installed, "bin/uranium.mjs");
+  const config = join(directory, "config"); mkdirSync(config);
+  writeFileSync(join(config, "opencode.jsonc"), '// Preserve this comment\n{"model":"example/model","plugin":["legacy-plugin"],"plugins":["existing-plugin"]}\n');
+  writeFileSync(join(config, "cli.json"), '{"plugins":["existing-tui"],"scroll":{"acceleration":true}}\n');
+  const run = args => execFileSync(process.execPath, [cli, ...args], { cwd: consumer, encoding: "utf8", timeout: 120000,
+    env: { ...process.env, URANIUM_HOME: join(directory, "data") } });
+  assert(run(["--version"]).includes("0.2.0"));
+  run(["setup", "--config-dir", config]);
+  run(["setup", "--config-dir", config]);
+  const server = readFileSync(join(config, "opencode.jsonc"), "utf8");
+  assert(server.includes("// Preserve this comment") && server.includes("existing-plugin") && server.includes("legacy-plugin"));
+  assert(!server.includes('"plugin":'));
+  const client = JSON.parse(readFileSync(join(config, "cli.json"), "utf8"));
+  assert.deepEqual(client.plugins, ["existing-tui"]);
+  assert.equal(client.theme.name, "uranium");
+  assert.equal((server.match(/@asvlcii\/uranium/g) ?? []).length, 1);
+  run(["setup", "--config-dir", config, "--koi", "explicit-koi-plugin", "--no-theme"]);
+  assert.deepEqual(JSON.parse(readFileSync(join(config, "cli.json"), "utf8")).plugins, ["existing-tui", "explicit-koi-plugin"]);
+  const doctor = JSON.parse(run(["doctor"])); assert.equal(doctor.engineReady, true); assert.equal(doctor.koiRequired, false);
+  const capture = JSON.parse(run(["memory", "capture", "The package fixture uses seabird SQLite WAL journaling."]));
+  assert.equal(capture.auto_approved, false);
+  const review = JSON.parse(run(["memory", "review"])); const card = review.cards[0];
+  run(["memory", "approve", card.candidate_id, card.review_revision]);
+  assert(run(["memory", "recall", "seabird SQLite WAL"]).includes("seabird SQLite WAL"));
+  const dependencies = Object.keys(JSON.parse(readFileSync(join(installed, "package.json"), "utf8")).dependencies);
+  assert(!dependencies.some(name => /koi|pond/.test(name)));
+  mkdirSync(join(root, "artifacts"), { recursive: true });
+  writeFileSync(join(root, "artifacts/package-check.json"), JSON.stringify({ name: pack.name, version: pack.version, files: paths, size: pack.size, unpackedSize: pack.unpackedSize, setupPreservesPlugins: true, koiDefault: false, koiOptIn: true, installedEngineRecall: true }, null, 2));
+  console.log(`Packed and installed ${pack.name}@${pack.version}: ${paths.length} files, ${pack.size} bytes. Node CLI, standalone memory engine and explicit koi opt-in passed.`);
+} finally { rmSync(directory, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }); }

@@ -1,0 +1,1 @@
+{ "name": "uranium-test-probe", "private": true, "type": "module", "exports": { ".": "./server.ts" } }

@@ -1,0 +1,36 @@
+{
+  "name": "@asvlcii/uranium",
+  "version": "0.2.0",
+  "description": "Reviewed long-term memory, resumable checkpoints and scoped workflows for OpenCode. Koi is optional and separate.",
+  "author": "ASVLCII",
+  "repository": { "type": "git", "url": "git+https://github.com/ASVLCII/uranium.git" },
+  "homepage": "https://github.com/ASVLCII/uranium#readme",
+  "bugs": { "url": "https://github.com/ASVLCII/uranium/issues" },
+  "engines": { "node": ">=22" },
+  "bin": { "uranium": "./bin/uranium.mjs", "u92": "./bin/uranium.mjs" },
+  "files": ["bin", "dist", "scripts/memory_bridge.py", "engine", "assets/skills", "assets/uranium-theme.json", "assets/LICENSE.*", "LICENSE", "NOTICE.md", "README.md"],
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": "./dist/server.js",
+    "./tui": "./dist/tui.js"
+  },
+  "scripts": {
+    "build": "bun scripts/build.ts",
+    "test": "bun test",
+    "check": "tsc --noEmit",
+    "pack:check": "node scripts/check-package.mjs"
+  },
+  "dependencies": {
+    "jsonc-parser": "3.3.1"
+  },
+  "devDependencies": {
+    "@opencode/plugin": "2.2.1",
+    "@opencode/theme": "2.2.1",
+    "@opentui/core": "0.7.0",
+    "@opentui/solid": "0.7.0",
+    "@types/bun": "latest",
+    "solid-js": "1.9.12",
+    "typescript": "^5.9.0"
+  }
+}
