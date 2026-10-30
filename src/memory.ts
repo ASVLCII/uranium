@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { realpathSync, existsSync, readFileSync, statSync, readdirSync } from "node:fs";
+import { realpathSync, existsSync, readFileSync, statSync, opendirSync, type Dir } from "node:fs";
 import { join, dirname, resolve } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -105,8 +105,14 @@ export class Memory {
   async recall(query: string, session: string, signal?: AbortSignal) {
     if (signal?.aborted) throw new Error("Memory request cancelled");
     const scopes = ["project", "user"].filter(scope => {
-      try { return readdirSync(join(this.home(scope), "memory", "records")).some(name => name.endsWith(".json")); }
+      let directory: Dir | undefined;
+      try {
+        directory = opendirSync(join(this.home(scope), "memory", "records"));
+        let entry; while ((entry = directory.readSync())) if (entry.isFile() && entry.name.endsWith(".json")) return true;
+        return false;
+      }
       catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return false; throw error; }
+      finally { directory?.closeSync(); }
     });
     if (!scopes.length) return renderRecall([]);
     const result = await this.call("recall-batch", { query, session, scopes }, signal);

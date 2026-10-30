@@ -1,6 +1,6 @@
 {
   "name": "@asvlcii/uranium",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Reviewed long-term memory, resumable checkpoints and scoped workflows for OpenCode. Koi is optional and separate.",
   "author": "ASVLCII",
   "repository": {

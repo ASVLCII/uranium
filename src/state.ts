@@ -15,8 +15,10 @@ export class State {
     if (this.closed) throw new Error("Uranium state is closed");
     if (!this.connection) {
       mkdirSync(this.directory, { recursive: true });
-      this.connection = new Database(join(this.directory, "continuity.sqlite"), { create: true });
-      this.connection.exec("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; CREATE TABLE IF NOT EXISTS state (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated TEXT NOT NULL); CREATE TABLE IF NOT EXISTS receipts (id INTEGER PRIMARY KEY, session TEXT, kind TEXT, value TEXT, created TEXT)");
+      const connection = new Database(join(this.directory, "continuity.sqlite"), { create: true });
+      try { connection.exec("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; CREATE TABLE IF NOT EXISTS state (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated TEXT NOT NULL); CREATE TABLE IF NOT EXISTS receipts (id INTEGER PRIMARY KEY, session TEXT, kind TEXT, value TEXT, created TEXT)"); }
+      catch (error) { connection.close(true); throw error; }
+      this.connection = connection;
     }
     return this.connection;
   }
@@ -36,6 +38,18 @@ export class State {
     })();
   }
   recent(session: string) { return this.db.query("SELECT kind,value,created FROM receipts WHERE session=? ORDER BY id DESC LIMIT 12").all(session); }
+  saveHandoff(id: string, value: unknown) {
+    this.db.transaction(() => {
+      this.put(`handoff:${id}`, value);
+      this.db.exec("DELETE FROM state WHERE key GLOB 'handoff:*' AND key NOT IN (SELECT key FROM state WHERE key GLOB 'handoff:*' ORDER BY updated DESC,rowid DESC LIMIT 20)");
+    })();
+  }
+  handoffs() {
+    return (this.db.query("SELECT value FROM state WHERE key GLOB 'handoff:*' ORDER BY updated DESC,rowid DESC LIMIT 20").all() as { value: string }[]).map(row => {
+      const record = JSON.parse(row.value);
+      return { id: record.id, sourceSession: record.sourceSession, createdAt: record.createdAt, goal: String(record.checkpoint?.goal ?? "").slice(0, 240) };
+    });
+  }
   observeTool(session: string, observation: Record<string, unknown>) {
     this.db.transaction(() => {
       const previous = this.get(`recovery:${session}`);
@@ -51,10 +65,11 @@ export class State {
       this.receipt(session, "tool", observation);
     })();
   }
-  recoveryNote(session: string) {
+  recoveryNote(session: string, excludeCallID?: string) {
     const record = this.get(`recovery:${session}`);
-    const pending = Array.isArray(record?.pending) ? record.pending : [];
-    return record ? { ...record, pendingCount: pending.length, pending: pending.slice(0, 4), pendingListTruncated: pending.length > 4 } : undefined;
+    const pending = Array.isArray(record?.pending) ? record.pending.filter((entry: any) => entry.callID !== excludeCallID) : [];
+    const observation = excludeCallID && record?.callID === excludeCallID ? { observedAt: record.observedAt, pendingOverflow: record.pendingOverflow, meaning: record.meaning } : record;
+    return record ? { ...observation, pendingCount: pending.length, pending: pending.slice(0, 4), pendingListTruncated: pending.length > 4 } : undefined;
   }
-  close() { this.closed = true; this.connection?.close(true); }
+  close() { if (this.closed) return; this.closed = true; this.connection?.close(true); this.connection = undefined; }
 }

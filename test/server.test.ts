@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync } from "node:fs";
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import server from "../src/server.ts";
@@ -40,6 +40,13 @@ test("registered context hook delivers real approved memory and checkpoints; com
     expect(JSON.parse((await tools.get("uranium_checkpoint").execute({ action: "read" }, { sessionID: "s" })).content).goal).toBe("Implement WAL");
     const compact = { sessionID: "s", system: [] as any[] }; await hooks.compaction(compact);
     expect(JSON.stringify(compact.system)).toContain("Run database tests");
+    const handoff = JSON.parse((await tools.get("uranium_handoff").execute({ action: "create" }, { sessionID: "s" })).content);
+    await tools.get("uranium_handoff").execute({ action: "adopt", id: handoff.id }, { sessionID: "destination" });
+    const resumed = { sessionID: "destination", system: [] as any[] }; await hooks.compaction(resumed);
+    expect(JSON.stringify(resumed.system)).toContain("imported completed-work claims remain unverified");
+    await expect(tools.get("uranium_handoff").execute({ action: "list" }, { sessionID: "foreign" })).rejects.toThrow("mismatch");
+    const explanation = JSON.parse((await tools.get("uranium_memory").execute({ action: "explain", query: "seabird SQLite WAL" }, { sessionID: "s" })).content);
+    expect(explanation.deliveredCount).toBeGreaterThan(0);
     const foreign = { ...event, sessionID: "foreign", system: [] }; await hooks.context(foreign); expect(foreign.system).toHaveLength(0);
     await expect(tools.get("uranium_memory").execute({ action: "capture", scope: "user", summary: "personal" }, { sessionID: "s" })).rejects.toThrow("operator");
     await cleanup?.(); cleanup = undefined; expect(disposed).toBe(8);
@@ -75,6 +82,52 @@ test("corrupt continuity storage does not prevent native context or tool executi
   } finally {
     await cleanup?.();
     if (original === undefined) delete process.env.URANIUM_HOME; else process.env.URANIUM_HOME = original;
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("status reports unavailable Python separately and cleanup disposes all hooks after one failure", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "uranium-status-"));
+  const previousHome = process.env.URANIUM_HOME, previousPython = process.env.URANIUM_MEMORY_PYTHON;
+  process.env.URANIUM_HOME = directory; process.env.URANIUM_MEMORY_PYTHON = "uranium-missing-python-fixture";
+  let cleanup: Awaited<ReturnType<typeof server.setup>> = undefined;
+  let disposed = 0, prompt = ""; const commands = new Map<string, any>();
+  const registration = { dispose: async () => { disposed++; if (disposed === 2) throw new Error("fixture disposal failure"); } };
+  try {
+    const ctx = {
+      app: { version: "2.2.1" }, location: { directory, project: { canonical: directory } },
+      skill: { transform: async (cb: Function) => { cb({ add: () => {} }); return registration; } },
+      session: { get: async () => ({ location: { directory } }), hook: async () => registration, prompt: async (value: any) => { prompt = value.text; } },
+      tool: { transform: async (cb: Function) => { cb({ add: () => {} }); return registration; }, hook: async () => registration },
+      command: { transform: async (cb: Function) => { cb({ add: (command: any) => commands.set(command.name, command) }); return registration; } },
+    } as unknown as Context;
+    cleanup = await server.setup(ctx);
+    await commands.get("uranium-status").execute({ sessionID: "s", prompt: { text: "" }, delivery: {} });
+    expect(prompt).toContain('"memoryAvailable":false'); expect(prompt).toContain('"continuityAvailable":true');
+    await expect(cleanup?.()).rejects.toThrow("cleanup encountered errors");
+    expect(disposed).toBe(8);
+    await cleanup?.(); cleanup = undefined;
+  } finally {
+    await cleanup?.();
+    if (previousHome === undefined) delete process.env.URANIUM_HOME; else process.env.URANIUM_HOME = previousHome;
+    if (previousPython === undefined) delete process.env.URANIUM_MEMORY_PYTHON; else process.env.URANIUM_MEMORY_PYTHON = previousPython;
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("a partial setup failure releases earlier registrations without opening continuity storage", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "uranium-setup-failure-")), previous = process.env.URANIUM_HOME;
+  process.env.URANIUM_HOME = directory; let disposed = 0, subscribed = 0;
+  const registration = { dispose: async () => { disposed++; } };
+  try {
+    const ctx = { location: { directory, project: { canonical: directory } },
+      skill: { transform: async () => registration },
+      session: { hook: async () => { if (++subscribed === 2) throw new Error("fixture setup failure"); return registration; } },
+    } as unknown as Context;
+    await expect(server.setup(ctx)).rejects.toThrow("fixture setup failure");
+    expect(disposed).toBe(2); expect(existsSync(new Memory(projectKey(directory), directory).home())).toBe(false);
+  } finally {
+    if (previous === undefined) delete process.env.URANIUM_HOME; else process.env.URANIUM_HOME = previous;
     rmSync(directory, { recursive: true, force: true });
   }
 });

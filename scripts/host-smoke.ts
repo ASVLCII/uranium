@@ -48,7 +48,7 @@ try {
   }
   writeFileSync(resolve(root, "artifacts/host-smoke.json"), JSON.stringify({ session, commands, plugins }, null, 2));
   const serialized = JSON.stringify(commands);
-  if (!serialized.includes("uranium-plan") || !serialized.includes("uranium-status")) throw new Error("Uranium commands did not register");
+  if (!["uranium-plan", "uranium-status", "uranium-handoff", "uranium-memory-explain"].every(name => serialized.includes(name))) throw new Error("Uranium commands did not register");
   await request(`/api/session/${session.data.id}/model`, "POST", { model: { providerID: "uranium-probe", id: "context-probe" } });
   await request(`/api/session/${session.data.id}/prompt`, "POST", { text: "Recall the seabird SQLite WAL journaling requirement." });
   for (let attempt = 0; !existsSync(probeOutput); attempt++) {

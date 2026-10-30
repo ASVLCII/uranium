@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.0 — 2026-10-30
+
+- Add on-demand recall explanations through `uranium memory explain`, `uranium_memory` and `/uranium-memory-explain`. Distinguish canonical engine exclusions from adapter budget cuts, preserving the existing recall budget and admission rules.
+- Add explicit project-local handoffs between sessions through `uranium_handoff` and `/uranium-handoff`. Check Git revision/status and optional bounded file hashes; protect current progress and treat imported completed work as unverified historical claims.
+- Bound handoff history to 20 snapshots per project, 12,000 characters per snapshot and eight files of at most 1 MiB each. Store hashes rather than file contents; exclude personal memory and transcripts.
+- Report continuity diagnostics when Python is unavailable, release all hooks despite disposal errors, and clean up partial plugin setup. Add a real bridge-cancellation regression.
+- Scan memory-store directory entries incrementally. Handoff and inspection work runs only when requested; no new dependency, worker service, polling loop or automatic model call.
+
 ## 0.3.0 — 2026-10-30
 
 - Reduce the server bundle by using public SDK types instead of bundling runtime schema constructors for fixed identifiers.

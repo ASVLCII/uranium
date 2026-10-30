@@ -123,7 +123,7 @@ import { TextRenderable, StyledText, fg } from "@opentui/core";
 
 // src/memory.ts
 import { createHash } from "crypto";
-import { realpathSync, existsSync, readFileSync, statSync, readdirSync } from "fs";
+import { realpathSync, existsSync, readFileSync, statSync, opendirSync } from "fs";
 import { join, dirname, resolve } from "path";
 import { homedir } from "os";
 import { fileURLToPath } from "url";
@@ -343,12 +343,20 @@ class Memory {
     if (signal?.aborted)
       throw new Error("Memory request cancelled");
     const scopes = ["project", "user"].filter((scope) => {
+      let directory;
       try {
-        return readdirSync(join(this.home(scope), "memory", "records")).some((name) => name.endsWith(".json"));
+        directory = opendirSync(join(this.home(scope), "memory", "records"));
+        let entry;
+        while (entry = directory.readSync())
+          if (entry.isFile() && entry.name.endsWith(".json"))
+            return true;
+        return false;
       } catch (error) {
         if (error.code === "ENOENT")
           return false;
         throw error;
+      } finally {
+        directory?.closeSync();
       }
     });
     if (!scopes.length)

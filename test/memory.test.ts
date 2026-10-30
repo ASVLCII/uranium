@@ -98,3 +98,24 @@ test("cancelled and unavailable Python calls fail explicitly without saving data
     expect(existsSync(memory.home())).toBe(false);
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
+
+test("cancelling an already spawned Python bridge stops the owned process", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "uranium-live-abort-"));
+  const original = Bun.spawn; let child: any;
+  Bun.spawn = ((...args: any[]) => {
+    const result = (original as any)(...args);
+    if (Array.isArray(args[0]) && args[0].some((value: unknown) => typeof value === "string" && value.endsWith("memory_bridge.py"))) child = result;
+    return result;
+  }) as typeof Bun.spawn;
+  try {
+    const memory = new Memory("repo:" + "a".repeat(32), directory), controller = new AbortController();
+    const request = memory.call("review", {}, controller.signal);
+    expect(child?.pid).toBeGreaterThan(0);
+    controller.abort();
+    await expect(request).rejects.toThrow("cancelled");
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try { await Promise.race([child.exited, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("Cancelled bridge stayed alive")), 5000); })]); }
+    finally { clearTimeout(timer); }
+    expect(child.exitCode).not.toBeNull();
+  } finally { Bun.spawn = original; if (child?.exitCode === null) child.kill(); rmSync(directory, { recursive: true, force: true }); }
+}, 10000);

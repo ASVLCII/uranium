@@ -1,5 +1,17 @@
 import { test, expect } from "bun:test";
-import { renderRecall } from "../src/recall.ts";
+import { renderRecall, explainRecall } from "../src/recall.ts";
+
+test("recall inspection distinguishes engine exclusions from adapter budget cuts without exposing excluded content", () => {
+  const included = Array.from({ length: 6 }, (_, index) => ({ record_id: `project-${index}`, summary: "x".repeat(500), record_type: "fact", scope: { kind: "project", ref: "repo:p" }, source: "s".repeat(160), eligibility_reason: "eligible", ranking: { relevance_rank: index + 1 } }));
+  const result = renderRecall([{ scope: { kind: "project", ref: "repo:p" }, included_records: included,
+    excluded_records: [{ record_id: "expired", reason: "expired", summary: "EXCLUDED CONTENT MUST NOT LEAK" }, { record_id: "prototype", reason: "__proto__" }] }]);
+  const report = explainRecall(result);
+  expect(report.deliveredCharacters).toBe(result.text.length); expect(report.deliveredCount).toBe(result.count);
+  expect(report.scopes[0].candidates.some(record => record.disposition === "adapter_budget_cut")).toBe(true);
+  expect(report.scopes[0].exclusionCounts.expired).toBe(1); expect(report.scopes[0].exclusionCounts["__proto__"]).toBe(1);
+  expect(JSON.stringify(report)).not.toContain("EXCLUDED CONTENT");
+  expect(JSON.stringify(report)).toContain("relevance_rank");
+});
 function record(id: string, scope: string, summary = "a".repeat(490)) {
   return { record_id: id, scope: { kind: scope, ref: scope }, summary, record_type: "fact", source: "fixture",
     approved_at: "2026-10-30T00:00:00Z", revision: 2, resolution: "unresolved", resolution_marker: "open · 3 days unresolved", staleness: { status: "fresh" } };

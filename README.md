@@ -11,7 +11,7 @@ Uranium is an MIT-licensed OpenCode plugin. It adds a durable memory layer using
 Requirements: **OpenCode 2.2.1**, **Node.js 22+** for the setup CLI, and **Python 3.11+** available as `python` on Windows or `python3` elsewhere. OpenCode supplies Bun and the terminal renderer for the plugin itself. Python's standard library is enough; Hermes, pip and an existing OMH installation are unnecessary.
 
 ```sh
-npm install -g github:ASVLCII/uranium#v0.3.0
+npm install -g github:ASVLCII/uranium#v0.4.0
 uranium setup
 uranium doctor
 ```
@@ -56,8 +56,24 @@ The `--koi` option only registers the package/path you provide; it never downloa
 | `/uranium-learn` | Propose an evidence-backed reusable lesson for review |
 | `/uranium-status` | Explain memory, checkpoint and tool evidence |
 | `/uranium-route <task>` | Inspect available models and recommend a choice without switching silently |
+| `/uranium-memory-explain <query>` | Explain current recall selection, exclusions and context-budget cuts |
+| `/uranium-handoff <action>` | Explicitly create, list, inspect or adopt a handoff between sessions |
 
 ## Memory and data
+
+### Explain memory and hand off work in 0.4
+
+Run `uranium memory explain "your query"` for a local diagnostic without a model call. It shows the approved records selected by the same project/personal recall path used by the context hook, available per-scope ranking evidence, engine exclusion reasons and adapter budget cuts. Excluded records expose only IDs and reasons, not their summaries. Output is bounded. This performs a fresh evaluation; it does not reconstruct what a previous request received. Inside OpenCode, `/uranium-memory-explain <query>` asks the agent to interpret those diagnostics through `uranium_memory` action `explain`.
+
+Use `/uranium-handoff create` to ask the agent to save a concise checkpoint and create an explicit project-local handoff. In another session, `/uranium-handoff list`, then `/uranium-handoff inspect <id>` and `/uranium-handoff adopt <id>` make that state available. These slash commands use the current model when requested; handoffs add no automatic model calls. The `uranium_handoff` tool also exposes those four actions directly.
+
+- Handoffs contain the checkpoint, optional workflow and a bounded recovery summary. They exclude personal memory and raw transcripts. No user-data export file or remote upload is created.
+- Creation and inspection each make one bounded Git call. Optionally select up to eight relative files in the session's working directory, at most 1 MiB each; only hashes and paths are retained. Traversal and links resolving outside that directory are rejected.
+- Inspection checks Git HEAD/status and the selected file hashes. Dirty work always requires review because unchanged Git status does not prove unchanged contents. Ignored files, dependencies and external systems remain outside these checks.
+- Adoption protects existing destination progress unless `replace=true` is explicitly selected. Imported completed-work claims are retained as historical reports; the destination completed list starts empty. Inspect drift and reconcile unfinished side effects before executing next actions.
+- The latest 20 handoffs per project are retained, with a 12,000-character limit per snapshot. Older handoffs are replaced as new ones are created. Cross-project adoption is rejected; no work executes automatically.
+
+Automatic diagnostics continue to report continuity evidence even if Python is unavailable. Cleanup releases every registration after individual failures, and a partial setup failure releases earlier registrations. Empty-store checks scan directory entries incrementally instead of allocating an entire filename list.
 
 ### Resource use and recovery in 0.3
 

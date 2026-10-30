@@ -45,6 +45,9 @@ try {
   const review = JSON.parse(run(["memory", "review"])); const card = review.cards[0];
   run(["memory", "approve", card.candidate_id, card.review_revision]);
   assert(run(["memory", "recall", "seabird SQLite WAL"]).includes("seabird SQLite WAL"));
+  const explanation = JSON.parse(run(["memory", "explain", "seabird SQLite WAL"]));
+  assert(explanation.deliveredCount > 0 && explanation.deliveredCharacters <= 3500);
+  assert(explanation.scopes.some(scope => scope.candidates.some(record => record.disposition === "delivered")));
   const dependencies = Object.keys(JSON.parse(readFileSync(join(installed, "package.json"), "utf8")).dependencies);
   assert(!dependencies.some(name => /koi|pond/.test(name)));
   mkdirSync(join(root, "artifacts"), { recursive: true });

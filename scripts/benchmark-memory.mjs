@@ -53,7 +53,7 @@ try {
       bridgeLaunchesPerRequest: median(values.map(row => row.bridgeLaunches)) });
   }
   const report = { environment: { platform: process.platform, node: process.version, python: process.env.URANIUM_MEMORY_PYTHON || "platform default" },
-    equivalentSelectedIDs: true, limitations: "Three local samples per condition; retrieval path only. No model-quality, total RAM or CPU claim. New output additionally retains provenance and uncertainty.",
+    equivalentSelectedIDs: true, limitations: "Three local samples per condition; retrieval path only. No model-quality, total RAM or CPU claim. Versions may render metadata differently; selected record IDs are compared.",
     serverBytes: { previous: statSync(join(baseline, "dist/server.js")).size, current: statSync(join(root, "dist/server.js")).size }, summary, samples: rows };
   mkdirSync(join(root, "artifacts"), { recursive: true }); writeFileSync(join(root, "artifacts/resource-benchmark.json"), JSON.stringify(report, null, 2));
   console.log(JSON.stringify({ serverBytes: report.serverBytes, summary, equivalentSelectedIDs: true }, null, 2));
