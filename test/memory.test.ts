@@ -116,6 +116,6 @@ test("cancelling an already spawned Python bridge stops the owned process", asyn
     let timer: ReturnType<typeof setTimeout> | undefined;
     try { await Promise.race([child.exited, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("Cancelled bridge stayed alive")), 5000); })]); }
     finally { clearTimeout(timer); }
-    expect(child.exitCode).not.toBeNull();
-  } finally { Bun.spawn = original; if (child?.exitCode === null) child.kill(); rmSync(directory, { recursive: true, force: true }); }
+    expect(child.exitCode !== null || typeof child.signalCode === "string").toBe(true);
+  } finally { Bun.spawn = original; if (child?.exitCode === null && typeof child?.signalCode !== "string") child.kill(); rmSync(directory, { recursive: true, force: true }); }
 }, 10000);
